@@ -18,6 +18,7 @@ import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 import java.util.ArrayList;
@@ -100,6 +101,42 @@ public class MainActivity extends Activity {
         });
         root.addView(this.toggleButton);
         root.addView(divider());
+
+        TextView masterTitle = new TextView(this);
+        masterTitle.setText("总开关");
+        masterTitle.setTextSize(18.0f);
+        masterTitle.setTextColor(Color.rgb(93, 64, 55));
+        masterTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        masterTitle.setPadding(0, 16, 0, 4);
+        root.addView(masterTitle);
+        LinearLayout masterRow = new LinearLayout(this);
+        masterRow.setOrientation(0);
+        masterRow.setGravity(16);
+        masterRow.setBackgroundColor(-1);
+        masterRow.setPadding(24, 12, 24, 12);
+        TextView masterLabel = new TextView(this);
+        masterLabel.setText("启用文本改写");
+        masterLabel.setTextSize(16.0f);
+        masterLabel.setTextColor(Color.rgb(51, 51, 51));
+        masterLabel.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
+        masterRow.addView(masterLabel);
+        Switch masterSwitchView = new Switch(this);
+        masterSwitchView.setChecked(CatConfig.isMasterEnabled(this));
+        masterSwitchView.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                getSharedPreferences("cat_config", 0).edit().putBoolean(CatConfig.KEY_MASTER_SWITCH, isChecked).apply();
+                Toast.makeText(MainActivity.this, isChecked ? "改写已开启" : "改写已关闭", Toast.LENGTH_SHORT).show();
+            }
+        });
+        masterRow.addView(masterSwitchView);
+        root.addView(masterRow);
+        TextView masterHint = new TextView(this);
+        masterHint.setText("关闭后立即暂停所有改写，随时可重新打开");
+        masterHint.setTextSize(11.0f);
+        masterHint.setTextColor(Color.rgb(161, 136, 127));
+        masterHint.setPadding(0, 4, 0, 0);
+        root.addView(masterHint);
 
         TextView modeTitle = new TextView(this);
         modeTitle.setText("处理模式");
@@ -404,6 +441,7 @@ public class MainActivity extends Activity {
 
     public void saveConfig() {
         try {
+            this.config.masterSwitch = CatConfig.isMasterEnabled(this);
             this.config.enableAppend = this.cbAppend.isChecked();
             String append = this.etAppendText.getText().toString().trim();
             this.config.appendText = append.isEmpty() ? "喵~" : append;

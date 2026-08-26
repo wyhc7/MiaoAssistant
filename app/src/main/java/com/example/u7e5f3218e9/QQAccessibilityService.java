@@ -58,6 +58,13 @@ public class QQAccessibilityService extends AccessibilityService {
             }
         }
         if (isSupportedPkg(pkg)) {
+            if (!CatConfig.isMasterEnabled(this)) {
+                this.processing = false;
+                this.userOriginal = "";
+                this.lastSet = "";
+                this.lastWriteTime = 0L;
+                return;
+            }
             int type = e.getEventType();
             if (type == 32) {
                 this.processing = false;

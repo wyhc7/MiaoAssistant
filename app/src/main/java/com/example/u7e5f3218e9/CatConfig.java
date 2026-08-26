@@ -15,6 +15,7 @@ public class CatConfig {
     public static final String KEY_CUSTOM_EMOTICONS = "custom_emoticons";
     public static final String KEY_PROCESSING_MODE = "processing_mode";
     public static final String KEY_RULES_SEEDED = "rules_seeded";
+    public static final String KEY_MASTER_SWITCH = "master_switch";
     public static final String MODE_PUNCTUATION = "punctuation";
     public static final String MODE_REALTIME = "realtime";
 
@@ -41,6 +42,7 @@ public class CatConfig {
     public boolean enableAppend = true;
     public String appendText = "喵~";
     public boolean enableRandomEmoticon = true;
+    public boolean masterSwitch = true;
     public String processingMode = MODE_PUNCTUATION;
     public String[] customEmoticons = new String[0];
     public List<Rule> rules = new ArrayList<>();
@@ -70,6 +72,10 @@ public class CatConfig {
             return null;
         }
         return new Rule(from, to);
+    }
+
+    public static boolean isMasterEnabled(Context ctx) {
+        return ctx.getSharedPreferences(PREFS_NAME, 0).getBoolean(KEY_MASTER_SWITCH, true);
     }
 
     public static List<Rule> defaultRules() {
@@ -102,6 +108,7 @@ public class CatConfig {
     public static CatConfig load(Context ctx) {
         SharedPreferences sp = ctx.getSharedPreferences(PREFS_NAME, 0);
         CatConfig cfg = new CatConfig();
+        cfg.masterSwitch = sp.getBoolean(KEY_MASTER_SWITCH, true);
         cfg.enableAppend = sp.getBoolean(KEY_ENABLE_APPEND, true);
         cfg.appendText = sp.getString(KEY_APPEND_TEXT, "喵~");
         cfg.enableRandomEmoticon = sp.getBoolean(KEY_ENABLE_EMOTICON, true);
@@ -140,6 +147,7 @@ public class CatConfig {
     public void save(Context ctx) {
         SharedPreferences sp = ctx.getSharedPreferences(PREFS_NAME, 0);
         SharedPreferences.Editor ed = sp.edit();
+        ed.putBoolean(KEY_MASTER_SWITCH, this.masterSwitch);
         ed.putBoolean(KEY_ENABLE_APPEND, this.enableAppend);
         ed.putString(KEY_APPEND_TEXT, this.appendText == null ? "喵~" : this.appendText);
         ed.putBoolean(KEY_ENABLE_EMOTICON, this.enableRandomEmoticon);
