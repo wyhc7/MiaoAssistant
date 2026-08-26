@@ -31,6 +31,7 @@ public class QQAccessibilityService extends AccessibilityService {
     private static final String PKG_QQI = "com.tencent.mobileqqi";
     private static final String PKG_WECHAT = "com.tencent.mm";
     private static final String PKG_DOUYIN = "com.ss.android.ugc.aweme";
+    private static final String PKG_DOUYIN_LITE = "com.ss.android.ugc.aweme.lite";
     private static final String[] SEND_TEXTS = {"发送", "發送", "Send"};
     private static final String TAG = "QQCatSvc";
     private CatConfig cachedConfig;
@@ -162,7 +163,7 @@ public class QQAccessibilityService extends AccessibilityService {
             return true;
         }
         return PKG_QQ.equals(pkg) || PKG_QQI.equals(pkg) || PKG_WECHAT.equals(pkg)
-                || PKG_DOUYIN.equals(pkg);
+                || PKG_DOUYIN.equals(pkg) || PKG_DOUYIN_LITE.equals(pkg);
     }
 
     private static boolean isSendText(CharSequence cs) {
@@ -652,7 +653,7 @@ public class QQAccessibilityService extends AccessibilityService {
         i.feedbackType = 16;
         i.flags = 115;
         i.notificationTimeout = 50L;
-        i.packageNames = DEBUG ? null : new String[]{PKG_QQ, PKG_QQI, PKG_WECHAT, PKG_DOUYIN};
+        i.packageNames = DEBUG ? null : new String[]{PKG_QQ, PKG_QQI, PKG_WECHAT, PKG_DOUYIN, PKG_DOUYIN_LITE};
         setServiceInfo(i);
         this.cachedConfig = CatConfig.load(this);
     }
