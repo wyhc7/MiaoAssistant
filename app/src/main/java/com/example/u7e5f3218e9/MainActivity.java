@@ -61,7 +61,7 @@ public class MainActivity extends Activity {
         title.setPadding(0, 40, 0, 8);
         root.addView(title);
         TextView subtitle = new TextView(this);
-        subtitle.setText("支持 QQ / 微信 / 抖音 · 所有规则均可自定义");
+        subtitle.setText("支持 QQ / 抖音 · 所有规则均可自定义\n（微信已屏蔽第三方无障碍读取，暂不可用）");
         subtitle.setTextSize(14.0f);
         subtitle.setTextColor(Color.rgb(141, 110, 99));
         subtitle.setGravity(17);
