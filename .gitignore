@@ -5,6 +5,11 @@ build/
 # 本机环境（含 SDK 路径，不提交）
 local.properties
 
+# 签名材料（严禁提交）
+keystore.properties
+*.keystore
+*.jks
+
 # IDE
 .idea/
 *.iml

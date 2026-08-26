@@ -1,0 +1,67 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Restore signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/miao-release.keystore"
+            {
+              echo "storeFile=$RUNNER_TEMP/miao-release.keystore"
+              echo "storePassword=$STORE_PASSWORD"
+              echo "keyAlias=$KEY_ALIAS"
+              echo "keyPassword=$KEY_PASSWORD"
+            } > keystore.properties
+            echo "signed release enabled"
+          else
+            echo "no keystore secret, release apk will be unsigned (debug only)"
+          fi
+
+      - name: Build APKs
+        run: ./gradlew assembleDebug assembleRelease --no-daemon
+
+      - name: Collect APKs
+        run: |
+          mkdir -p dist
+          VERSION="${GITHUB_REF_NAME}"
+          cp app/build/outputs/apk/debug/app-debug.apk "dist/MiaoAssistant-${VERSION}-debug.apk"
+          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
+            cp app/build/outputs/apk/release/app-release.apk "dist/MiaoAssistant-${VERSION}-release.apk"
+          fi
+          ls -l dist/
+
+      - name: Upload artifacts (manual run)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: MiaoAssistant-apks
+          path: dist/*.apk
+
+      - name: Attach to GitHub Release
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.apk

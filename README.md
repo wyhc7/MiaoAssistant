@@ -37,9 +37,18 @@
 
 ## 构建
 ```bash
-./gradlew assembleDebug
+./gradlew assembleDebug    # debug 包，无需签名配置
+./gradlew assembleRelease  # 正式签名包（需本地 keystore.properties）
 ```
-产物：`app/build/outputs/apk/debug/app-debug.apk`
+产物：`app/build/outputs/apk/{debug,release}/`
+
+### CI 自动构建
+- **CI**：push 到 main / PR 时自动编译 debug APK 并上传 artifact
+- **Release**：推送 `v*` 标签时自动构建 debug + 正式签名包，并附加到对应 GitHub Release
+
+正式签名需在仓库 Secrets 中配置：`KEYSTORE_BASE64`、`STORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD`；
+本地签名则在项目根目录放置 `keystore.properties`（storeFile / storePassword / keyAlias / keyPassword），
+密钥文件与 properties 均已 gitignore，切勿提交。
 
 ## 使用
 1. 安装 APK（开启"允许未知来源"）
