@@ -31,7 +31,6 @@ public class QQAccessibilityService extends AccessibilityService {
     private static final String PKG_QQI = "com.tencent.mobileqqi";
     private static final String PKG_WECHAT = "com.tencent.mm";
     private static final String PKG_DOUYIN = "com.ss.android.ugc.aweme";
-    private static final String PKG_DOUYIN_LITE = "com.ss.android.ugc.aweme.lite";
     private static final String[] SEND_TEXTS = {"发送", "發送", "Send"};
     private static final String TAG = "QQCatSvc";
     private CatConfig cachedConfig;
@@ -40,6 +39,7 @@ public class QQAccessibilityService extends AccessibilityService {
     private boolean processing = false;
     private long lastWriteTime = 0;
     private String stableEmoticon = "";
+    private String lastUsedEmoticon = "";
     private int prevRawLen = 0;
     private boolean deleting = false;
 
@@ -102,12 +102,15 @@ public class QQAccessibilityService extends AccessibilityService {
                 String mode = cfg.processingMode != null ? cfg.processingMode : CatConfig.MODE_PUNCTUATION;
                 AccessibilityNodeInfo src = e.getSource();
                 CharSequence curTxt = (src != null && src.isEditable()) ? src.getText() : null;
+                boolean jumpInsert = false;
                 if (curTxt != null) {
                     int curLen = curTxt.length();
-                    if (curLen < this.prevRawLen) {
+                    int delta = curLen - this.prevRawLen;
+                    if (delta < 0) {
                         this.deleting = true;
-                    } else if (curLen > this.prevRawLen) {
+                    } else {
                         this.deleting = false;
+                        jumpInsert = delta >= 2;
                     }
                     this.prevRawLen = curLen;
                 }
@@ -119,7 +122,7 @@ public class QQAccessibilityService extends AccessibilityService {
                     return;
                 }
                 boolean realtime = CatConfig.MODE_REALTIME.equals(mode);
-                if (!realtime) {
+                if (!realtime && !jumpInsert) {
                     CharSequence probe = null;
                     if (src != null && src.isEditable()) {
                         probe = src.getText();
@@ -159,7 +162,7 @@ public class QQAccessibilityService extends AccessibilityService {
             return true;
         }
         return PKG_QQ.equals(pkg) || PKG_QQI.equals(pkg) || PKG_WECHAT.equals(pkg)
-                || PKG_DOUYIN.equals(pkg) || PKG_DOUYIN_LITE.equals(pkg);
+                || PKG_DOUYIN.equals(pkg);
     }
 
     private static boolean isSendText(CharSequence cs) {
@@ -396,11 +399,15 @@ public class QQAccessibilityService extends AccessibilityService {
             return;
         }
         String forcedEmoticon = null;
-        if (isRealtime && cfg.enableRandomEmoticon) {
-            if (this.stableEmoticon.isEmpty()) {
-                this.stableEmoticon = TextProcessor.getRandomEmoticon(cfg);
+        if (cfg.enableRandomEmoticon) {
+            if (isRealtime) {
+                if (this.stableEmoticon.isEmpty()) {
+                    this.stableEmoticon = rollEmoticon(cfg);
+                }
+                forcedEmoticon = this.stableEmoticon;
+            } else {
+                forcedEmoticon = rollEmoticon(cfg);
             }
-            forcedEmoticon = this.stableEmoticon;
         }
         String target = TextProcessor.process(this.userOriginal, cfg, forcedEmoticon);
         if (!target.equals(raw)) {
@@ -417,6 +424,18 @@ public class QQAccessibilityService extends AccessibilityService {
         this.lastSet = target;
         inp.recycle();
         this.processing = false;
+    }
+
+    private String rollEmoticon(CatConfig cfg) {
+        String picked = this.lastUsedEmoticon;
+        for (int i = 0; i < 6; i++) {
+            picked = TextProcessor.getRandomEmoticon(cfg);
+            if (picked != null && !picked.equals(this.lastUsedEmoticon)) {
+                break;
+            }
+        }
+        this.lastUsedEmoticon = picked == null ? "" : picked;
+        return this.lastUsedEmoticon;
     }
 
     private String stripAll(String text, CatConfig cfg) {
@@ -633,7 +652,7 @@ public class QQAccessibilityService extends AccessibilityService {
         i.feedbackType = 16;
         i.flags = 115;
         i.notificationTimeout = 50L;
-        i.packageNames = DEBUG ? null : new String[]{PKG_QQ, PKG_QQI, PKG_WECHAT, PKG_DOUYIN, PKG_DOUYIN_LITE};
+        i.packageNames = DEBUG ? null : new String[]{PKG_QQ, PKG_QQI, PKG_WECHAT, PKG_DOUYIN};
         setServiceInfo(i);
         this.cachedConfig = CatConfig.load(this);
     }
