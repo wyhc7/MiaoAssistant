@@ -40,6 +40,8 @@ public class QQAccessibilityService extends AccessibilityService {
     private boolean processing = false;
     private long lastWriteTime = 0;
     private String stableEmoticon = "";
+    private int prevRawLen = 0;
+    private boolean deleting = false;
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent e) {
@@ -72,6 +74,8 @@ public class QQAccessibilityService extends AccessibilityService {
                 this.lastSet = "";
                 this.lastWriteTime = 0L;
                 this.stableEmoticon = "";
+                this.prevRawLen = 0;
+                this.deleting = false;
                 this.cachedConfig = CatConfig.load(this);
                 return;
             }
@@ -81,6 +85,7 @@ public class QQAccessibilityService extends AccessibilityService {
                     String id = src.getViewIdResourceName();
                     if (ID_SEND_QQ.equals(id) || isSendText(src.getText())) {
                         Log.d(TAG, "点击发送，兜底处理");
+                        this.deleting = false;
                         doProcess(true, null);
                     }
                     src.recycle();
@@ -96,6 +101,23 @@ public class QQAccessibilityService extends AccessibilityService {
                 }
                 String mode = cfg.processingMode != null ? cfg.processingMode : CatConfig.MODE_PUNCTUATION;
                 AccessibilityNodeInfo src = e.getSource();
+                CharSequence curTxt = (src != null && src.isEditable()) ? src.getText() : null;
+                if (curTxt != null) {
+                    int curLen = curTxt.length();
+                    if (curLen < this.prevRawLen) {
+                        this.deleting = true;
+                    } else if (curLen > this.prevRawLen) {
+                        this.deleting = false;
+                    }
+                    this.prevRawLen = curLen;
+                }
+                if (this.deleting) {
+                    Log.d(TAG, "删除中，跳过处理");
+                    if (src != null) {
+                        src.recycle();
+                    }
+                    return;
+                }
                 boolean realtime = CatConfig.MODE_REALTIME.equals(mode);
                 if (!realtime) {
                     CharSequence probe = null;
@@ -312,6 +334,8 @@ public class QQAccessibilityService extends AccessibilityService {
             this.userOriginal = "";
             this.lastSet = "";
             this.stableEmoticon = "";
+            this.prevRawLen = 0;
+            this.deleting = false;
             return;
         }
         String raw = cs.toString().trim();
@@ -321,6 +345,8 @@ public class QQAccessibilityService extends AccessibilityService {
             this.userOriginal = "";
             this.lastSet = "";
             this.stableEmoticon = "";
+            this.prevRawLen = 0;
+            this.deleting = false;
             return;
         }
         CatConfig cfg = this.cachedConfig;
