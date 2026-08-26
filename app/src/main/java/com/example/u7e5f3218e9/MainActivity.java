@@ -181,7 +181,7 @@ public class MainActivity extends Activity {
         emojiTitle.setPadding(0, 16, 0, 8);
         root.addView(emojiTitle);
         TextView emojiHint = new TextView(this);
-        emojiHint.setText("每行一个颜文字，留空则使用内置库");
+        emojiHint.setText("每行一个颜文字（已预置内置库，可自由增删）");
         emojiHint.setTextSize(12.0f);
         emojiHint.setTextColor(Color.rgb(141, 110, 99));
         emojiHint.setPadding(0, 0, 0, 12);
@@ -193,7 +193,9 @@ public class MainActivity extends Activity {
         this.etCustomEmoticons.setBackgroundColor(-1);
         this.etCustomEmoticons.setPadding(16, 12, 16, 12);
         this.etCustomEmoticons.setHint("例如: (=^w^=) 等");
-        this.etCustomEmoticons.setText(joinLines(this.config.customEmoticons));
+        String[] shownEmoticons = (this.config.customEmoticons != null && this.config.customEmoticons.length > 0)
+                ? this.config.customEmoticons : CatConfig.BUILTIN_EMOTICONS;
+        this.etCustomEmoticons.setText(joinLines(shownEmoticons));
         root.addView(this.etCustomEmoticons);
 
         Button saveBtn = new Button(this);

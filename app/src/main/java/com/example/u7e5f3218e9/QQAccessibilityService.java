@@ -2,12 +2,18 @@ package com.example.u7e5f3218e9;
 
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
-import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.List;
 
 public class QQAccessibilityService extends AccessibilityService {
     private static final String ID_INPUT_QQ = "com.tencent.mobileqq:id/input";
@@ -46,7 +52,7 @@ public class QQAccessibilityService extends AccessibilityService {
                     String id = src.getViewIdResourceName();
                     if (ID_SEND_QQ.equals(id) || isSendText(src.getText())) {
                         Log.d(TAG, "点击发送，兜底处理");
-                        doProcess(true);
+                        doProcess(true, null);
                     }
                     src.recycle();
                     return;
@@ -60,32 +66,19 @@ public class QQAccessibilityService extends AccessibilityService {
                     this.cachedConfig = cfg;
                 }
                 String mode = cfg.processingMode != null ? cfg.processingMode : CatConfig.MODE_PUNCTUATION;
-                if (CatConfig.MODE_REALTIME.equals(mode)) {
-                    doProcess(false);
-                    return;
+                AccessibilityNodeInfo src = e.getSource();
+                if (!CatConfig.MODE_REALTIME.equals(mode)) {
+                    CharSequence probe = (src != null && src.isEditable()) ? src.getText() : null;
+                    if (probe == null || probe.length() == 0 || !isPunctuationEnding(probe.toString().trim())) {
+                        if (src != null) {
+                            src.recycle();
+                        }
+                        return;
+                    }
+                    Log.d(TAG, "标点触发: " + probe.toString().trim());
                 }
-                AccessibilityNodeInfo root = getRootInActiveWindow();
-                if (root == null) {
-                    return;
-                }
-                AccessibilityNodeInfo inp = findInput(root);
-                if (inp == null) {
-                    return;
-                }
-                root.recycle();
-                if (inp == null) {
-                    return;
-                }
-                CharSequence cs = inp.getText();
-                inp.recycle();
-                if (cs == null || cs.length() == 0) {
-                    return;
-                }
-                String raw = cs.toString().trim();
-                if (!raw.isEmpty() && isPunctuationEnding(raw)) {
-                    Log.d(TAG, "标点触发: " + raw);
-                    doProcess(false);
-                }
+                doProcess(false, src);
+                return;
             }
         }
     }
@@ -108,8 +101,31 @@ public class QQAccessibilityService extends AccessibilityService {
         return false;
     }
 
+    private AccessibilityNodeInfo currentInput(AccessibilityNodeInfo preferred) {
+        if (preferred != null) {
+            AccessibilityNodeInfo copy = null;
+            if (preferred.isEditable()) {
+                copy = AccessibilityNodeInfo.obtain(preferred);
+            }
+            preferred.recycle();
+            if (copy != null) {
+                return copy;
+            }
+        }
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null) {
+            return null;
+        }
+        AccessibilityNodeInfo inp = findInput(root);
+        root.recycle();
+        return inp;
+    }
+
     private AccessibilityNodeInfo findInput(AccessibilityNodeInfo root) {
-        AccessibilityNodeInfo inp = findNodeById(root, ID_INPUT_QQ);
+        AccessibilityNodeInfo inp = findFocusedEditable(root);
+        if (inp == null) {
+            inp = findNodeById(root, ID_INPUT_QQ);
+        }
         if (inp == null) {
             inp = findNodeById(root, ID_INPUT_WECHAT_A);
         }
@@ -122,6 +138,26 @@ public class QQAccessibilityService extends AccessibilityService {
         return inp;
     }
 
+    private AccessibilityNodeInfo findFocusedEditable(AccessibilityNodeInfo n) {
+        if (n == null) {
+            return null;
+        }
+        if (n.isEditable() && n.isFocused()) {
+            return AccessibilityNodeInfo.obtain(n);
+        }
+        for (int i = 0; i < n.getChildCount(); i++) {
+            AccessibilityNodeInfo c = n.getChild(i);
+            if (c != null) {
+                AccessibilityNodeInfo r = findFocusedEditable(c);
+                c.recycle();
+                if (r != null) {
+                    return r;
+                }
+            }
+        }
+        return null;
+    }
+
     private boolean isPunctuationEnding(String s) {
         if (s == null || s.isEmpty()) {
             return false;
@@ -130,26 +166,22 @@ public class QQAccessibilityService extends AccessibilityService {
         return last == 12290 || last == 65281 || last == '!' || last == 65311 || last == '?' || last == ' ';
     }
 
-    private void doProcess(boolean isSendClick) {
+    private void doProcess(boolean isSendClick, AccessibilityNodeInfo preferred) {
         if (this.processing) {
+            if (preferred != null) {
+                preferred.recycle();
+            }
             return;
         }
         this.processing = true;
-        AccessibilityNodeInfo root = getRootInActiveWindow();
-        if (root == null) {
-            this.processing = false;
-            return;
-        }
-        AccessibilityNodeInfo inp = findInput(root);
+        AccessibilityNodeInfo inp = currentInput(preferred);
         if (inp == null) {
-            root.recycle();
             this.processing = false;
             return;
         }
         CharSequence cs = inp.getText();
         if (cs == null || cs.length() == 0) {
             inp.recycle();
-            root.recycle();
             this.processing = false;
             this.userOriginal = "";
             this.lastSet = "";
@@ -158,7 +190,6 @@ public class QQAccessibilityService extends AccessibilityService {
         String raw = cs.toString().trim();
         if (raw.isEmpty()) {
             inp.recycle();
-            root.recycle();
             this.processing = false;
             this.userOriginal = "";
             this.lastSet = "";
@@ -175,7 +206,6 @@ public class QQAccessibilityService extends AccessibilityService {
             Log.d(TAG, "写入回显跳过");
             this.lastWriteTime = 0L;
             inp.recycle();
-            root.recycle();
             this.processing = false;
             return;
         }
@@ -199,7 +229,6 @@ public class QQAccessibilityService extends AccessibilityService {
         if (this.userOriginal.isEmpty()) {
             Log.d(TAG, "原文为空，跳过");
             inp.recycle();
-            root.recycle();
             this.processing = false;
             return;
         }
@@ -216,13 +245,11 @@ public class QQAccessibilityService extends AccessibilityService {
                 this.lastWriteTime = System.currentTimeMillis();
             }
             inp.recycle();
-            root.recycle();
             this.processing = false;
             return;
         }
         this.lastSet = target;
         inp.recycle();
-        root.recycle();
         this.processing = false;
     }
 
@@ -242,17 +269,49 @@ public class QQAccessibilityService extends AccessibilityService {
             return "";
         }
         String result = text;
-        String[] emotes = cfg.getActiveEmoticons();
-        if (emotes.length == 0) {
-            emotes = CatConfig.BUILTIN_EMOTICONS;
+
+        List<CatConfig.Rule> reversedRules = new ArrayList<>();
+        if (cfg.rules != null) {
+            for (CatConfig.Rule r : cfg.rules) {
+                if (r != null && !r.from.isEmpty() && !r.to.isEmpty()) {
+                    reversedRules.add(r);
+                }
+            }
         }
-        Arrays.sort(emotes, new Comparator() {
+        Collections.sort(reversedRules, new Comparator<CatConfig.Rule>() {
             @Override
-            public int compare(Object obj, Object obj2) {
-                return QQAccessibilityService.lambda$stripAll$0((String) obj, (String) obj2);
+            public int compare(CatConfig.Rule a, CatConfig.Rule b) {
+                return b.to.length() - a.to.length();
             }
         });
-        for (String em : emotes) {
+        for (CatConfig.Rule r : reversedRules) {
+            result = result.replace(r.to, r.from);
+        }
+
+        String app = cfg.appendText == null ? "" : cfg.appendText.trim();
+        if (!app.isEmpty()) {
+            result = result.replace(" " + app, " ");
+            result = result.replace(app, "");
+        }
+
+        String[] emotes = cfg.getActiveEmoticons();
+        List<String> sortedEmotes = new ArrayList<>();
+        if (emotes.length == 0) {
+            for (String em : CatConfig.BUILTIN_EMOTICONS) {
+                sortedEmotes.add(em);
+            }
+        } else {
+            for (String em : emotes) {
+                sortedEmotes.add(em);
+            }
+        }
+        Collections.sort(sortedEmotes, new Comparator<String>() {
+            @Override
+            public int compare(String a, String b) {
+                return b.length() - a.length();
+            }
+        });
+        for (String em : sortedEmotes) {
             if (em == null || em.isEmpty()) {
                 continue;
             }
@@ -268,10 +327,6 @@ public class QQAccessibilityService extends AccessibilityService {
             }
         }
         return result.replaceAll("\\s*[\\p{S}\\p{So}\\p{Sm}\\p{Sk}\\p{P}]{3,}\\s*", " ").trim();
-    }
-
-    static  int lambda$stripAll$0(String a, String b) {
-        return b.length() - a.length();
     }
 
     private AccessibilityNodeInfo findNodeById(AccessibilityNodeInfo n, String id) {
@@ -314,19 +369,49 @@ public class QQAccessibilityService extends AccessibilityService {
         return null;
     }
 
-    private boolean setText(AccessibilityNodeInfo n, String t) {
+    private boolean setText(final AccessibilityNodeInfo n, String t) {
         if (n == null) {
             return false;
         }
         try {
             Bundle b = new Bundle();
             b.putCharSequence("ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE", t);
-            boolean ok = n.performAction(2097152, b);
-            if (ok) {
+            if (n.performAction(2097152, b)) {
                 Bundle a = new Bundle();
                 a.putInt("ACTION_ARGUMENT_SELECTION_START_INT", t.length());
                 a.putInt("ACTION_ARGUMENT_SELECTION_END_INT", t.length());
                 n.performAction(131072, a);
+                return true;
+            }
+            final ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            if (cm == null) {
+                return false;
+            }
+            CharSequence oldClip = null;
+            try {
+                if (cm.hasPrimaryClip() && cm.getPrimaryClip().getItemCount() > 0) {
+                    oldClip = cm.getPrimaryClip().getItemAt(0).getText();
+                }
+            } catch (Exception ignore) {
+            }
+            cm.setPrimaryClip(ClipData.newPlainText("miao", t));
+            boolean sel = n.performAction(131072);
+            boolean ok = sel && n.performAction(32768);
+            Log.d(TAG, "SET_TEXT 失败，剪贴板兜底: " + ok);
+            final CharSequence restore = oldClip;
+            if (ok) {
+                new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            ClipboardManager cm2 = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                            if (cm2 != null) {
+                                cm2.setPrimaryClip(ClipData.newPlainText("miao", restore == null ? "" : restore));
+                            }
+                        } catch (Exception ignore) {
+                        }
+                    }
+                }, 500L);
             }
             return ok;
         } catch (Exception e) {
