@@ -19,6 +19,7 @@ public class CatConfig {
     public static final String MODE_REALTIME = "realtime";
 
     public static final String[] DEFAULT_RULES = {"我=本喵", "你=主人", "是=素", "什么=神马", "这样=酱紫", "喜欢=稀饭"};
+    public static final String DEFAULT_APPEND_TEXT = "喵~";
 
     private static final String PREFS_NAME = "cat_config";
 
@@ -38,7 +39,7 @@ public class CatConfig {
     }
 
     public boolean enableAppend = true;
-    public String appendText = "喵";
+    public String appendText = "喵~";
     public boolean enableRandomEmoticon = true;
     public String processingMode = MODE_PUNCTUATION;
     public String[] customEmoticons = new String[0];
@@ -102,7 +103,7 @@ public class CatConfig {
         SharedPreferences sp = ctx.getSharedPreferences(PREFS_NAME, 0);
         CatConfig cfg = new CatConfig();
         cfg.enableAppend = sp.getBoolean(KEY_ENABLE_APPEND, true);
-        cfg.appendText = sp.getString(KEY_APPEND_TEXT, "喵");
+        cfg.appendText = sp.getString(KEY_APPEND_TEXT, "喵~");
         cfg.enableRandomEmoticon = sp.getBoolean(KEY_ENABLE_EMOTICON, true);
         cfg.processingMode = sp.getString(KEY_PROCESSING_MODE, MODE_PUNCTUATION);
 
@@ -140,7 +141,7 @@ public class CatConfig {
         SharedPreferences sp = ctx.getSharedPreferences(PREFS_NAME, 0);
         SharedPreferences.Editor ed = sp.edit();
         ed.putBoolean(KEY_ENABLE_APPEND, this.enableAppend);
-        ed.putString(KEY_APPEND_TEXT, this.appendText == null ? "" : this.appendText);
+        ed.putString(KEY_APPEND_TEXT, this.appendText == null ? "喵~" : this.appendText);
         ed.putBoolean(KEY_ENABLE_EMOTICON, this.enableRandomEmoticon);
         ed.putString(KEY_PROCESSING_MODE, this.processingMode == null ? MODE_PUNCTUATION : this.processingMode);
         ed.putString(KEY_RULES, rulesToString(this.rules));

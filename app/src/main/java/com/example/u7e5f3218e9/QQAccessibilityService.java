@@ -2,20 +2,27 @@ package com.example.u7e5f3218e9;
 
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
+import android.content.BroadcastReceiver;
 import android.content.ClipData;
 import android.content.ClipboardManager;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityWindowInfo;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
 public class QQAccessibilityService extends AccessibilityService {
+    private static final boolean DEBUG = false;
+    public static final String KEY_BLOCKED_PREFIX = "blocked_";
     private static final String ID_INPUT_QQ = "com.tencent.mobileqq:id/input";
     private static final String ID_SEND_QQ = "com.tencent.mobileqq:id/send_btn";
     private static final String ID_INPUT_WECHAT_A = "com.tencent.mm:id/bkk";
@@ -32,10 +39,24 @@ public class QQAccessibilityService extends AccessibilityService {
     private String lastSet = "";
     private boolean processing = false;
     private long lastWriteTime = 0;
+    private String stableEmoticon = "";
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent e) {
         String pkg = e.getPackageName() != null ? e.getPackageName().toString() : "";
+        this.currentPkg = isSupportedPkg(pkg) ? pkg : this.currentPkg;
+        if (DEBUG) {
+            AccessibilityNodeInfo dbgSrc = e.getSource();
+            Log.d(TAG, "evt pkg=" + pkg + " type=" + e.getEventType()
+                    + " src=" + (dbgSrc != null ? (dbgSrc.isEditable() ? "editable" : "node") + ":" + dbgSrc.getViewIdResourceName() : "null"));
+            if (dbgSrc != null) {
+                CharSequence dt = dbgSrc.getText();
+                if (dt != null && DEBUG) {
+                    Log.d(TAG, "srcText=" + dt.toString().trim());
+                }
+                dbgSrc.recycle();
+            }
+        }
         if (isSupportedPkg(pkg)) {
             int type = e.getEventType();
             if (type == 32) {
@@ -43,6 +64,7 @@ public class QQAccessibilityService extends AccessibilityService {
                 this.userOriginal = "";
                 this.lastSet = "";
                 this.lastWriteTime = 0L;
+                this.stableEmoticon = "";
                 this.cachedConfig = CatConfig.load(this);
                 return;
             }
@@ -67,15 +89,35 @@ public class QQAccessibilityService extends AccessibilityService {
                 }
                 String mode = cfg.processingMode != null ? cfg.processingMode : CatConfig.MODE_PUNCTUATION;
                 AccessibilityNodeInfo src = e.getSource();
-                if (!CatConfig.MODE_REALTIME.equals(mode)) {
-                    CharSequence probe = (src != null && src.isEditable()) ? src.getText() : null;
-                    if (probe == null || probe.length() == 0 || !isPunctuationEnding(probe.toString().trim())) {
+                boolean realtime = CatConfig.MODE_REALTIME.equals(mode);
+                if (!realtime) {
+                    CharSequence probe = null;
+                    if (src != null && src.isEditable()) {
+                        probe = src.getText();
+                    } else {
+                        if (DEBUG) {
+                            Log.d(TAG, "源节点不可用，回退窗口搜索预检");
+                        }
+                        AccessibilityNodeInfo tmp = currentInput(src, pkg);
+                        src = null;
+                        if (tmp != null) {
+                            CharSequence t2 = tmp.getText();
+                            if (t2 != null) {
+                                probe = t2.toString().trim();
+                            }
+                            tmp.recycle();
+                        }
+                    }
+                    if (probe == null || probe.length() == 0 || !isPunctuationEnding(probe.toString())) {
+                        if (DEBUG) {
+                            Log.d(TAG, "未满足标点触发条件");
+                        }
                         if (src != null) {
                             src.recycle();
                         }
                         return;
                     }
-                    Log.d(TAG, "标点触发: " + probe.toString().trim());
+                    Log.d(TAG, "标点触发: " + probe.toString());
                 }
                 doProcess(false, src);
                 return;
@@ -84,6 +126,9 @@ public class QQAccessibilityService extends AccessibilityService {
     }
 
     private static boolean isSupportedPkg(String pkg) {
+        if (DEBUG) {
+            return true;
+        }
         return PKG_QQ.equals(pkg) || PKG_QQI.equals(pkg) || PKG_WECHAT.equals(pkg)
                 || PKG_DOUYIN.equals(pkg) || PKG_DOUYIN_LITE.equals(pkg);
     }
@@ -101,7 +146,30 @@ public class QQAccessibilityService extends AccessibilityService {
         return false;
     }
 
-    private AccessibilityNodeInfo currentInput(AccessibilityNodeInfo preferred) {
+    private int emptyStrikes = 0;
+
+    private void markProbeFailure(String pkg) {
+        if (pkg == null) {
+            return;
+        }
+        this.emptyStrikes++;
+        if (this.emptyStrikes >= 3) {
+            getSharedPreferences("cat_config", MODE_PRIVATE).edit()
+                    .putBoolean(KEY_BLOCKED_PREFIX + pkg, true).apply();
+            Log.w(TAG, pkg + " 疑似屏蔽无障碍读取，已标记");
+            this.emptyStrikes = 0;
+        }
+    }
+
+    private void markProbeSuccess(String pkg) {
+        this.emptyStrikes = 0;
+        if (pkg != null) {
+            getSharedPreferences("cat_config", MODE_PRIVATE).edit()
+                    .remove(KEY_BLOCKED_PREFIX + pkg).apply();
+        }
+    }
+
+    private AccessibilityNodeInfo currentInput(AccessibilityNodeInfo preferred, String pkg) {
         if (preferred != null) {
             AccessibilityNodeInfo copy = null;
             if (preferred.isEditable()) {
@@ -114,11 +182,56 @@ public class QQAccessibilityService extends AccessibilityService {
         }
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null) {
+            if (DEBUG) {
+                Log.d(TAG, "currentInput: getRootInActiveWindow 为 null（可能被系统限制获取窗口内容）");
+            }
             return null;
         }
+        if (DEBUG) {
+            StringBuilder sb = new StringBuilder("tree pkg=").append(root.getPackageName())
+                    .append(" childCount=").append(root.getChildCount()).append("\n");
+            dumpTree(root, 0, sb);
+            Log.d(TAG, sb.toString());
+        }
         AccessibilityNodeInfo inp = findInput(root);
+        if (inp == null) {
+            if (root.getChildCount() == 0) {
+                markProbeFailure(pkg);
+            }
+            if (DEBUG) {
+                Log.d(TAG, "currentInput: 窗口树中未找到可编辑节点");
+            }
+        } else {
+            if (DEBUG) {
+                Log.d(TAG, "currentInput: 定位到输入节点 id=" + inp.getViewIdResourceName() + " cls=" + inp.getClassName());
+            }
+            markProbeSuccess(pkg);
+        }
         root.recycle();
         return inp;
+    }
+
+    private void dumpTree(AccessibilityNodeInfo n, int depth, StringBuilder sb) {
+        if (n == null || depth > 4 || sb.length() > 3000) {
+            return;
+        }
+        for (int i = 0; i < n.getChildCount(); i++) {
+            AccessibilityNodeInfo c = n.getChild(i);
+            if (c == null) {
+                sb.append("  ".repeat(depth + 1)).append("[").append(i).append("] null\n");
+                continue;
+            }
+            CharSequence txt = c.getText();
+            sb.append("  ".repeat(Math.min(depth + 1, 5)))
+                    .append("[").append(i).append("] ")
+                    .append(c.getClassName()).append(" ed=").append(c.isEditable())
+                    .append(" foc=").append(c.isFocused())
+                    .append(" id=").append(c.getViewIdResourceName())
+                    .append(" txt=").append(txt == null ? "" : txt.toString().substring(0, Math.min(20, txt.length())))
+                    .append("\n");
+            dumpTree(c, depth + 1, sb);
+            c.recycle();
+        }
     }
 
     private AccessibilityNodeInfo findInput(AccessibilityNodeInfo root) {
@@ -163,8 +276,11 @@ public class QQAccessibilityService extends AccessibilityService {
             return false;
         }
         char last = s.charAt(s.length() - 1);
-        return last == 12290 || last == 65281 || last == '!' || last == 65311 || last == '?' || last == ' ';
+        return last == 12290 || last == 65281 || last == '!' || last == 65311 || last == '?'
+                || last == '~' || last == 65374 || last == ' ';
     }
+
+    private String currentPkg = "";
 
     private void doProcess(boolean isSendClick, AccessibilityNodeInfo preferred) {
         if (this.processing) {
@@ -174,8 +290,11 @@ public class QQAccessibilityService extends AccessibilityService {
             return;
         }
         this.processing = true;
-        AccessibilityNodeInfo inp = currentInput(preferred);
+        AccessibilityNodeInfo inp = currentInput(preferred, this.currentPkg);
         if (inp == null) {
+            if (DEBUG) {
+                Log.d(TAG, "doProcess: 未找到输入节点");
+            }
             this.processing = false;
             return;
         }
@@ -185,6 +304,7 @@ public class QQAccessibilityService extends AccessibilityService {
             this.processing = false;
             this.userOriginal = "";
             this.lastSet = "";
+            this.stableEmoticon = "";
             return;
         }
         String raw = cs.toString().trim();
@@ -193,6 +313,7 @@ public class QQAccessibilityService extends AccessibilityService {
             this.processing = false;
             this.userOriginal = "";
             this.lastSet = "";
+            this.stableEmoticon = "";
             return;
         }
         CatConfig cfg = this.cachedConfig;
@@ -230,13 +351,17 @@ public class QQAccessibilityService extends AccessibilityService {
             Log.d(TAG, "原文为空，跳过");
             inp.recycle();
             this.processing = false;
+            this.stableEmoticon = "";
             return;
         }
-        CatConfig effectiveCfg = cfg;
-        if (isRealtime && cfg.enableRandomEmoticon && !isSendClick) {
-            effectiveCfg = cloneConfigWithoutEmoticon(cfg);
+        String forcedEmoticon = null;
+        if (isRealtime && cfg.enableRandomEmoticon) {
+            if (this.stableEmoticon.isEmpty()) {
+                this.stableEmoticon = TextProcessor.getRandomEmoticon(cfg);
+            }
+            forcedEmoticon = this.stableEmoticon;
         }
-        String target = TextProcessor.process(this.userOriginal, effectiveCfg);
+        String target = TextProcessor.process(this.userOriginal, cfg, forcedEmoticon);
         if (!target.equals(raw)) {
             Log.d(TAG, "写入: raw=" + raw + "  userOriginal=" + this.userOriginal + "  target=" + target);
             boolean ok = setText(inp, target);
@@ -251,17 +376,6 @@ public class QQAccessibilityService extends AccessibilityService {
         this.lastSet = target;
         inp.recycle();
         this.processing = false;
-    }
-
-    private CatConfig cloneConfigWithoutEmoticon(CatConfig src) {
-        CatConfig c = new CatConfig();
-        c.enableAppend = src.enableAppend;
-        c.appendText = src.appendText;
-        c.enableRandomEmoticon = false;
-        c.processingMode = src.processingMode;
-        c.customEmoticons = src.customEmoticons;
-        c.rules = src.rules;
-        return c;
     }
 
     private String stripAll(String text, CatConfig cfg) {
@@ -376,7 +490,11 @@ public class QQAccessibilityService extends AccessibilityService {
         try {
             Bundle b = new Bundle();
             b.putCharSequence("ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE", t);
-            if (n.performAction(2097152, b)) {
+            boolean setTextOk = n.performAction(2097152, b);
+            if (DEBUG) {
+                Log.d(TAG, "ACTION_SET_TEXT -> " + setTextOk + "  id=" + n.getViewIdResourceName() + " cls=" + n.getClassName());
+            }
+            if (setTextOk) {
                 Bundle a = new Bundle();
                 a.putInt("ACTION_ARGUMENT_SELECTION_START_INT", t.length());
                 a.putInt("ACTION_ARGUMENT_SELECTION_END_INT", t.length());
@@ -424,15 +542,57 @@ public class QQAccessibilityService extends AccessibilityService {
         this.processing = false;
     }
 
+    private final BroadcastReceiver dumpReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            List<AccessibilityWindowInfo> wins = getWindows();
+            if (wins != null) {
+                StringBuilder wb = new StringBuilder("WINDOWS n=").append(wins.size()).append("\n");
+                for (int i = 0; i < wins.size(); i++) {
+                    AccessibilityWindowInfo w = wins.get(i);
+                    AccessibilityNodeInfo r = w.getRoot();
+                    wb.append("win[").append(i).append("] type=").append(w.getType())
+                            .append(" layer=").append(w.getLayer())
+                            .append(" active=").append(w.isActive())
+                            .append(" focused=").append(w.isFocused())
+                            .append(" pkg=").append(r == null ? "null-root" : r.getPackageName())
+                            .append(" cc=").append(r == null ? -1 : r.getChildCount())
+                            .append("\n");
+                    if (r != null) {
+                        r.recycle();
+                    }
+                }
+                Log.d(TAG, wb.toString());
+            }
+            AccessibilityNodeInfo root = getRootInActiveWindow();
+            if (root == null) {
+                Log.d(TAG, "DUMP: root null");
+                return;
+            }
+            StringBuilder sb = new StringBuilder("DUMP pkg=").append(root.getPackageName())
+                    .append(" cc=").append(root.getChildCount()).append("\n");
+            dumpTree(root, 0, sb);
+            Log.d(TAG, sb.toString());
+            root.recycle();
+        }
+    };
+
     @Override
     public void onServiceConnected() {
         super.onServiceConnected();
+        if (DEBUG) {
+            try {
+                registerReceiver(dumpReceiver, new IntentFilter("com.example.u7e5f3218e9.DUMP"), Context.RECEIVER_EXPORTED);
+            } catch (Exception e) {
+                Log.d(TAG, "register dumpReceiver failed: " + e);
+            }
+        }
         AccessibilityServiceInfo i = new AccessibilityServiceInfo();
         i.eventTypes = 49;
         i.feedbackType = 16;
-        i.flags = 81;
+        i.flags = 115;
         i.notificationTimeout = 50L;
-        i.packageNames = new String[]{PKG_QQ, PKG_QQI, PKG_WECHAT, PKG_DOUYIN, PKG_DOUYIN_LITE};
+        i.packageNames = DEBUG ? null : new String[]{PKG_QQ, PKG_QQI, PKG_WECHAT, PKG_DOUYIN, PKG_DOUYIN_LITE};
         setServiceInfo(i);
         this.cachedConfig = CatConfig.load(this);
     }

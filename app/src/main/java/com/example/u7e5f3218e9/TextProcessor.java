@@ -11,6 +11,10 @@ public class TextProcessor {
     private static final Pattern SENTENCE_SPLIT_PATTERN = Pattern.compile("([，,。！!？?\\s]+)");
 
     public static String process(String original, CatConfig config) {
+        return process(original, config, null);
+    }
+
+    public static String process(String original, CatConfig config, String forcedEmoticon) {
         if (original == null || original.trim().isEmpty()) {
             return original;
         }
@@ -30,7 +34,8 @@ public class TextProcessor {
         }
 
         if (config.enableRandomEmoticon) {
-            String emoticon = getRandomEmoticon(config);
+            String emoticon = (forcedEmoticon != null && !forcedEmoticon.isEmpty())
+                    ? forcedEmoticon : getRandomEmoticon(config);
             if (emoticon != null && !emoticon.isEmpty()) {
                 text = text + " " + emoticon;
             }
@@ -75,7 +80,7 @@ public class TextProcessor {
         return resultStr;
     }
 
-    private static String getRandomEmoticon(CatConfig config) {
+    public static String getRandomEmoticon(CatConfig config) {
         String[] emoticons = config.getActiveEmoticons();
         if (emoticons == null || emoticons.length == 0) {
             emoticons = CatConfig.BUILTIN_EMOTICONS;

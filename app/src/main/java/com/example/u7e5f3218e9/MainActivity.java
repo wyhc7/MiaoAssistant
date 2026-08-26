@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
+import android.content.SharedPreferences;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.accessibility.AccessibilityManager;
@@ -29,6 +30,7 @@ public class MainActivity extends Activity {
     private EditText etAppendText;
     private EditText etCustomEmoticons;
     private EditText etRules;
+    private TextView noticeText;
     private CheckBox rbPunctuation;
     private CheckBox rbRealtime;
     private TextView statusText;
@@ -73,6 +75,16 @@ public class MainActivity extends Activity {
         this.statusText.setBackgroundColor(-1);
         this.statusText.setTextColor(Color.rgb(51, 51, 51));
         root.addView(this.statusText);
+        this.noticeText = new TextView(this);
+        this.noticeText.setTextSize(13.0f);
+        this.noticeText.setPadding(24, 12, 24, 12);
+        this.noticeText.setBackgroundColor(Color.rgb(255, 243, 224));
+        this.noticeText.setTextColor(Color.rgb(230, 81, 0));
+        this.noticeText.setVisibility(View.GONE);
+        LinearLayout.LayoutParams noticeLp = new LinearLayout.LayoutParams(-1, -2);
+        noticeLp.setMargins(0, 8, 0, 0);
+        this.noticeText.setLayoutParams(noticeLp);
+        root.addView(this.noticeText);
         this.toggleButton = new Button(this);
         this.toggleButton.setTextSize(16.0f);
         this.toggleButton.setTextColor(-1);
@@ -143,8 +155,8 @@ public class MainActivity extends Activity {
         this.etAppendText.setInputType(131073);
         this.etAppendText.setBackgroundColor(-1);
         this.etAppendText.setPadding(16, 12, 16, 12);
-        this.etAppendText.setHint("追加内容（默认：喵）");
-        this.etAppendText.setText(this.config.appendText != null ? this.config.appendText : "喵");
+        this.etAppendText.setHint("追加内容（默认：喵~）");
+        this.etAppendText.setText(this.config.appendText != null && !this.config.appendText.isEmpty() ? this.config.appendText : "喵~");
         LinearLayout.LayoutParams etLp1 = new LinearLayout.LayoutParams(-1, -2);
         etLp1.setMargins(0, 0, 0, 4);
         this.etAppendText.setLayoutParams(etLp1);
@@ -264,6 +276,7 @@ public class MainActivity extends Activity {
         if (this.statusText == null || this.toggleButton == null) {
             return;
         }
+        updateBlockedNotice();
         boolean enabled = isAccessibilityServiceEnabled();
         if (enabled) {
             this.statusText.setText("服务状态：已开启");
@@ -278,6 +291,31 @@ public class MainActivity extends Activity {
         this.toggleButton.setText("前往开启无障碍服务");
         this.toggleButton.setEnabled(true);
         this.toggleButton.setBackgroundColor(Color.rgb(255, 111, 0));
+    }
+
+    private void updateBlockedNotice() {
+        if (this.noticeText == null) {
+            return;
+        }
+        try {
+            SharedPreferences sp = getSharedPreferences("cat_config", 0);
+            StringBuilder sb = new StringBuilder();
+            if (sp.getBoolean("blocked_com.tencent.mm", false)) {
+                sb.append("⚠ 微信已屏蔽本工具读取其输入框（微信新版本对第三方无障碍的限制），微信内暂不生效，QQ/抖音不受影响\n");
+            }
+            if (sp.getBoolean("blocked_com.ss.android.ugc.aweme", false)) {
+                sb.append("⚠ 抖音已屏蔽本工具读取其输入框（应用侧限制）\n");
+            }
+            String msg = sb.toString().trim();
+            if (msg.isEmpty()) {
+                this.noticeText.setVisibility(View.GONE);
+                this.noticeText.setText("");
+            } else {
+                this.noticeText.setVisibility(View.VISIBLE);
+                this.noticeText.setText(msg);
+            }
+        } catch (Exception e) {
+        }
     }
 
     private boolean isAccessibilityServiceEnabled() {
@@ -368,7 +406,7 @@ public class MainActivity extends Activity {
         try {
             this.config.enableAppend = this.cbAppend.isChecked();
             String append = this.etAppendText.getText().toString().trim();
-            this.config.appendText = append.isEmpty() ? "喵" : append;
+            this.config.appendText = append.isEmpty() ? "喵~" : append;
             this.config.enableRandomEmoticon = this.cbEmoticon.isChecked();
             this.config.processingMode = this.rbRealtime.isChecked() ? CatConfig.MODE_REALTIME : CatConfig.MODE_PUNCTUATION;
 
