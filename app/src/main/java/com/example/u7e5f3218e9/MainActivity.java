@@ -10,6 +10,7 @@ import android.graphics.Typeface;
 import android.os.Bundle;
 import android.content.SharedPreferences;
 import android.view.View;
+import android.view.ViewParent;
 import android.view.ViewGroup;
 import android.view.accessibility.AccessibilityManager;
 import android.widget.Button;
@@ -220,6 +221,7 @@ public class MainActivity extends Activity {
         this.etRules.setBackgroundColor(-1);
         this.etRules.setPadding(16, 12, 16, 12);
         this.etRules.setText(CatConfig.rulesToString(this.config.rules));
+        makeInnerScrollable(this.etRules);
         root.addView(this.etRules);
 
         TextView emojiTitle = new TextView(this);
@@ -237,14 +239,15 @@ public class MainActivity extends Activity {
         root.addView(emojiHint);
         this.etCustomEmoticons = new EditText(this);
         this.etCustomEmoticons.setInputType(131073);
-        this.etCustomEmoticons.setLines(4);
-        this.etCustomEmoticons.setMinLines(4);
+        this.etCustomEmoticons.setLines(8);
+        this.etCustomEmoticons.setMinLines(8);
         this.etCustomEmoticons.setBackgroundColor(-1);
         this.etCustomEmoticons.setPadding(16, 12, 16, 12);
         this.etCustomEmoticons.setHint("例如: (=^w^=) 等");
         String[] shownEmoticons = (this.config.customEmoticons != null && this.config.customEmoticons.length > 0)
                 ? this.config.customEmoticons : CatConfig.BUILTIN_EMOTICONS;
         this.etCustomEmoticons.setText(joinLines(shownEmoticons));
+        makeInnerScrollable(this.etCustomEmoticons);
         root.addView(this.etCustomEmoticons);
 
         Button saveBtn = new Button(this);
@@ -380,6 +383,25 @@ public class MainActivity extends Activity {
         } catch (Exception e) {
             Toast.makeText(this, "无法打开设置", 0).show();
         }
+    }
+
+    private void makeInnerScrollable(final EditText et) {
+        et.setVerticalScrollBarEnabled(true);
+        et.setScrollbarFadingEnabled(false);
+        et.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, android.view.MotionEvent event) {
+                ViewParent p = v.getParent();
+                if (p != null) {
+                    p.requestDisallowInterceptTouchEvent(true);
+                    int action = event.getActionMasked();
+                    if (action == android.view.MotionEvent.ACTION_UP || action == android.view.MotionEvent.ACTION_CANCEL) {
+                        p.requestDisallowInterceptTouchEvent(false);
+                    }
+                }
+                return false;
+            }
+        });
     }
 
     private CheckBox addCheckbox(LinearLayout linearLayout, String title, String desc, boolean checked) {
