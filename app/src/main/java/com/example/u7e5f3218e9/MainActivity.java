@@ -386,8 +386,6 @@ public class MainActivity extends Activity {
     }
 
     private void makeInnerScrollable(final EditText et) {
-        et.setVerticalScrollBarEnabled(true);
-        et.setScrollbarFadingEnabled(false);
         et.setOnTouchListener(new View.OnTouchListener() {
             @Override
             public boolean onTouch(View v, android.view.MotionEvent event) {
