@@ -7,6 +7,7 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.net.Uri;
 import android.os.Bundle;
 import android.content.SharedPreferences;
 import android.view.View;
@@ -17,6 +18,7 @@ import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Switch;
@@ -54,6 +56,9 @@ public class MainActivity extends Activity {
         root.setBackgroundColor(Color.parseColor("#FFF8E1"));
         root.setLayoutParams(new ViewGroup.LayoutParams(-1, -2));
 
+        LinearLayout titleRow = new LinearLayout(this);
+        titleRow.setOrientation(0);
+        titleRow.setGravity(16);
         TextView title = new TextView(this);
         title.setText("喵喵助手");
         title.setTextSize(24.0f);
@@ -61,7 +66,26 @@ public class MainActivity extends Activity {
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setGravity(17);
         title.setPadding(0, 40, 0, 8);
-        root.addView(title);
+        title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
+        titleRow.addView(title);
+        ImageView ghButton = new ImageView(this);
+        ghButton.setImageResource(R.drawable.ic_github);
+        ghButton.setContentDescription("GitHub 项目主页");
+        ghButton.setPadding(16, 16, 16, 16);
+        ghButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                try {
+                    Intent ghIntent = new Intent("android.intent.action.VIEW", Uri.parse("https://github.com/wyhc7/MiaoAssistant"));
+                    ghIntent.setFlags(268435456);
+                    startActivity(ghIntent);
+                } catch (Exception e) {
+                    Toast.makeText(MainActivity.this, "无法打开浏览器", Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+        titleRow.addView(ghButton);
+        root.addView(titleRow);
         TextView subtitle = new TextView(this);
         subtitle.setText("支持 QQ / 抖音 · 所有规则均可自定义\n（微信已屏蔽第三方无障碍读取，暂不可用）");
         subtitle.setTextSize(14.0f);
