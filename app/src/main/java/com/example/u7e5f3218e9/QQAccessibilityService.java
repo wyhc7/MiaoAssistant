@@ -338,21 +338,29 @@ public class QQAccessibilityService extends AccessibilityService {
             return;
         }
         boolean isRealtime = CatConfig.MODE_REALTIME.equals(cfg.processingMode);
-        if (!isRealtime && this.lastSet.isEmpty()) {
+        if (raw.equals(this.lastSet)) {
+            Log.d(TAG, "内容无变化，跳过");
+            inp.recycle();
+            this.processing = false;
+            return;
+        }
+        if (this.lastSet.isEmpty()) {
             this.userOriginal = stripAll(raw, cfg);
-            Log.d(TAG, "标点首次剥离: " + this.userOriginal);
-        } else if (this.lastSet.isEmpty() || !raw.startsWith(this.lastSet)) {
-            if (this.lastSet.isEmpty()) {
-                this.userOriginal = stripAll(raw, cfg);
-                Log.d(TAG, "首条剥离: " + this.userOriginal);
-            } else {
-                this.userOriginal = stripAll(raw, cfg);
-                Log.d(TAG, "不匹配剥离: " + this.userOriginal);
-            }
-        } else {
+            Log.d(TAG, "首次剥离: " + this.userOriginal);
+        } else if (this.lastSet.startsWith(raw)) {
+            this.userOriginal = stripAll(raw, cfg);
+            this.lastSet = "";
+            Log.d(TAG, "检测到删除，仅同步状态不回写: " + this.userOriginal);
+            inp.recycle();
+            this.processing = false;
+            return;
+        } else if (raw.startsWith(this.lastSet)) {
             String added = raw.substring(this.lastSet.length());
             this.userOriginal += added;
             Log.d(TAG, "前缀增量: +" + added + "  userOriginal=" + this.userOriginal);
+        } else {
+            this.userOriginal = stripAll(raw, cfg);
+            Log.d(TAG, "任意编辑剥离: " + this.userOriginal);
         }
         if (this.userOriginal.isEmpty()) {
             Log.d(TAG, "原文为空，跳过");
